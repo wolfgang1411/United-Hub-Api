@@ -1,0 +1,182 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  passwordHash  String
+  name          String?
+  role          UserRole       @default(USER)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  createdTokens RefreshToken[]
+  userTargets   UserTarget[]
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Target {
+  id              String           @id @default(cuid())
+  deviceId        String           @unique
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  name            String?
+  chats           Chat[]
+  ingestionEvents IngestionEvent[]
+  messages        Message[]
+  notifications   Notification[]
+  userTargets     UserTarget[]
+  callLogs        CallLog[]
+
+  @@index([createdAt])
+}
+
+model UserTarget {
+  id        String   @id @default(cuid())
+  userId    String
+  targetId  String
+  createdAt DateTime @default(now())
+  name      String?
+  target    Target   @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, targetId])
+  @@index([targetId])
+}
+
+model App {
+  id              String           @id @default(cuid())
+  packageName     String           @unique
+  name            String           @unique
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  chats           Chat[]
+  ingestionEvents IngestionEvent[]
+  messages        Message[]
+  notifications   Notification[]
+}
+
+model Chat {
+  id            String    @id @default(cuid())
+  targetId      String
+  appId         String
+  title         String
+  normalizedKey String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  app           App       @relation(fields: [appId], references: [id], onDelete: Cascade)
+  target        Target    @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  messages      Message[]
+
+  @@unique([targetId, appId, normalizedKey])
+  @@index([appId])
+  @@index([targetId, createdAt])
+}
+
+model Message {
+  id               String           @id @default(cuid())
+  targetId         String
+  appId            String
+  chatId           String?
+  direction        MessageDirection
+  eventType        String
+  text             String
+  timestampMs      BigInt
+  className        String?
+  externalDeviceId String?
+  dedupeKey        String
+  createdAt        DateTime         @default(now())
+  possibleNoise    Boolean          @default(false)
+  app              App              @relation(fields: [appId], references: [id], onDelete: Cascade)
+  chat             Chat?            @relation(fields: [chatId], references: [id])
+  target           Target           @relation(fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@index([targetId, dedupeKey])
+  @@index([targetId, timestampMs(sort: Desc)])
+  @@index([chatId, timestampMs(sort: Desc)])
+  @@index([appId, timestampMs(sort: Desc)])
+}
+
+model Notification {
+  id               String   @id @default(cuid())
+  targetId         String
+  appId            String
+  title            String?
+  body             String?
+  type             String?
+  source           String?
+  timestampMs      BigInt
+  externalDeviceId String?
+  createdAt        DateTime @default(now())
+  app              App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+  target           Target   @relation(fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@index([targetId, timestampMs(sort: Desc)])
+  @@index([appId, timestampMs(sort: Desc)])
+}
+
+model IngestionEvent {
+  id               String             @id @default(cuid())
+  targetId         String
+  appId            String?
+  kind             IngestionEventType
+  payload          Json
+  timestampMs      BigInt?
+  externalDeviceId String?
+  createdAt        DateTime           @default(now())
+  app              App?               @relation(fields: [appId], references: [id])
+  target           Target             @relation(fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@index([targetId, createdAt(sort: Desc)])
+  @@index([kind, createdAt(sort: Desc)])
+}
+
+enum UserRole {
+  USER
+  SUPERADMIN
+}
+
+enum MessageDirection {
+  INCOMING
+  OUTGOING
+}
+
+enum IngestionEventType {
+  ACCESSIBILITY
+  NOTIFICATION
+  CALL
+  LOCATION
+  LAYOUT_DUMP
+  UNKNOWN
+}
+
+model CallLog {
+  id               String   @id @default(cuid())
+  targetId         String
+  number           String
+  name             String?
+  type             String?
+  timestampMs      BigInt
+  externalDeviceId String?
+  createdAt        DateTime @default(now())
+  target           Target   @relation(fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@index([targetId, timestampMs(sort: Desc)])
+}
