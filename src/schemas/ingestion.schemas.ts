@@ -9,6 +9,7 @@ export const notificationIngestSchema = z.object({
   appName: z.string().min(1).optional(),
   title: z.string().optional(),
   message: z.string().optional(),
+  text: z.string().optional(),
   timestamp: unixMs,
   deviceId: z.string().min(1).optional(),
 });

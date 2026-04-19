@@ -19,6 +19,19 @@ model User {
   userTargets   UserTarget[]
 }
 
+model logs {
+  id        String   @id @default(cuid())
+  message   String
+  timestamp DateTime @default(now())
+  level     LogLevel @default(INFO)
+}
+
+enum LogLevel {
+  INFO
+  WARN
+  ERROR
+}
+
 model RefreshToken {
   id        String    @id @default(cuid())
   userId    String

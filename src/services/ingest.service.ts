@@ -3,6 +3,8 @@ import { prisma } from "../lib/prisma";
 import { sseEmit } from "../lib/sse";
 import { normalizeChatTitle, sha256 } from "../utils/hash";
 import { serializeBigInt } from "../utils/serialize";
+import { logToDb } from "../utils/logger";
+import { LogLevel } from "@prisma/client";
 
 function resolveDeviceId(
   input: { deviceId?: string },
@@ -178,6 +180,7 @@ export async function ingestNotification(
     appName?: string;
     title?: string;
     message?: string;
+    text?: string;
     timestamp: number;
     deviceId?: string;
   },
@@ -192,7 +195,7 @@ export async function ingestNotification(
   ]);
 
   const resolvedTitle = payload.title?.trim() || "Unknown";
-  const resolvedMessage = payload.message?.trim() || "";
+  const resolvedMessage = (payload.message || payload.text || "")?.trim();
 
   const notification = await prisma.notification.create({
     data: {
@@ -208,54 +211,79 @@ export async function ingestNotification(
   });
 
   let mirroredMessage = null;
-  if (resolvedMessage) {
-    const chat =
-      resolvedTitle.toLowerCase() === "unknown"
-        ? null
-        : await ensureChat(target.id, app.id, resolvedTitle);
-    const dedupeKey = sha256(
-      [
-        "NOTIFICATION",
-        "incoming",
-        resolvedMessage,
-        String(payload.timestamp),
-        resolvedTitle,
-        payload.packageName,
-      ].join("|"),
-    );
-
-    mirroredMessage = await prisma.message.create({
-      data: {
-        targetId: target.id,
-        appId: app.id,
-        chatId: chat?.id,
-        direction: MessageDirection.INCOMING,
-        eventType: "NOTIFICATION",
-        text: resolvedMessage,
-        timestampMs: toBigInt(payload.timestamp),
-        className: "notification",
-        externalDeviceId: deviceId,
-        dedupeKey,
-        possibleNoise: false,
-      },
-    });
-
-    if (chat?.id) {
-      sseEmit(
-        chat.id,
-        serializeBigInt({
-          id: mirroredMessage.id,
-          chatId: mirroredMessage.chatId,
-          targetId: mirroredMessage.targetId,
-          appId: mirroredMessage.appId,
-          text: mirroredMessage.text,
-          direction: mirroredMessage.direction,
-          timestampMs: mirroredMessage.timestampMs,
-          possibleNoise: mirroredMessage.possibleNoise,
-          createdAt: mirroredMessage.createdAt,
-        }),
+  try {
+    if (!resolvedMessage) {
+      await logToDb(
+        `Notification from ${payload.packageName} skipped mirroring: No message body. Title: "${resolvedTitle}". Payload: ${JSON.stringify(payload)}`,
+        LogLevel.WARN,
       );
     }
+
+    if (resolvedMessage) {
+      const chat =
+        resolvedTitle.toLowerCase() === "unknown"
+          ? null
+          : await ensureChat(target.id, app.id, resolvedTitle);
+      const dedupeKey = sha256(
+        [
+          "NOTIFICATION",
+          "incoming",
+          resolvedMessage,
+          String(payload.timestamp),
+          resolvedTitle,
+          payload.packageName,
+        ].join("|"),
+      );
+
+      mirroredMessage = await prisma.message.create({
+        data: {
+          targetId: target.id,
+          appId: app.id,
+          chatId: chat?.id,
+          direction: MessageDirection.INCOMING,
+          eventType: "NOTIFICATION",
+          text: resolvedMessage,
+          timestampMs: toBigInt(payload.timestamp),
+          className: "notification",
+          externalDeviceId: deviceId,
+          dedupeKey,
+          possibleNoise: false,
+        },
+      });
+
+      await logToDb(
+        `Notification from ${payload.packageName} mirrored to message ${mirroredMessage.id}. Chat: ${resolvedTitle}`,
+        LogLevel.INFO,
+      );
+
+      if (chat?.id) {
+        sseEmit(
+          chat.id,
+          serializeBigInt({
+            id: mirroredMessage.id,
+            chatId: mirroredMessage.chatId,
+            targetId: mirroredMessage.targetId,
+            appId: mirroredMessage.appId,
+            text: mirroredMessage.text,
+            direction: mirroredMessage.direction,
+            timestampMs: mirroredMessage.timestampMs,
+            possibleNoise: mirroredMessage.possibleNoise,
+            createdAt: mirroredMessage.createdAt,
+          }),
+        );
+      } else {
+        await logToDb(
+          `Mirrored message created without chat ID for notification from ${payload.packageName}`,
+          LogLevel.INFO,
+        );
+      }
+    }
+  } catch (err) {
+    const error = err as Error;
+    await logToDb(
+      `Error during notification mirroring for ${payload.packageName}: ${error.message}\n${error.stack}`,
+      LogLevel.ERROR,
+    );
   }
 
   await prisma.ingestionEvent.create({
