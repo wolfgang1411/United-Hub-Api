@@ -2,7 +2,7 @@
 # UnifiedNotification API test requests
 # Run from VS Code REST Client (or compatible .http runner)
 
-@baseUrl = https://adequate-mustang-usefully.ngrok-free.app
+@baseUrl = https://api.devlabhub.online/api
 @email = admin@example.com
 @password = ChangeMe123!
 @accessToken = REPLACE_WITH_ACCESS_TOKEN

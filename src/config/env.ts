@@ -12,7 +12,7 @@ function readEnv(name: string, fallback?: string): string {
 
 export const env = {
   port: Number(process.env.PORT ?? 3001),
-  databaseUrl: readEnv("DATABASE_URL","https://adequate-mustang-usefully.ngrok-free.app"),
+  databaseUrl: readEnv("DATABASE_URL","https://api.devlabhub.online/api"),
   jwtAccessSecret: readEnv("JWT_ACCESS_SECRET", 'j1mO7Ym97U2787Gvh6tA6C'),
   jwtRefreshSecret: readEnv("JWT_REFRESH_SECRET", 'K9L2e6Z0t3V0K811B0b7Q3'),
   jwtAccessTtl: readEnv("JWT_ACCESS_TTL", "24h"),
