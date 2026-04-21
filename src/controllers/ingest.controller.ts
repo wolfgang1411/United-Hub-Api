@@ -7,22 +7,38 @@ function fallbackDeviceId(req: Request): string | undefined {
 }
 
 export async function notification(req: Request, res: Response): Promise<void> {
-  const result = await ingestService.ingestNotification(
-    req.body,
-    fallbackDeviceId(req),
-  );
-  res.status(200).json({ status: "ok", id: result.notification.id });
+  const payloads = Array.isArray(req.body) ? req.body : [req.body];
+  const fbDeviceId = fallbackDeviceId(req);
+
+  const results = [];
+  for (const p of payloads) {
+    results.push(await ingestService.ingestNotification(p, fbDeviceId));
+  }
+
+  res.status(200).json({
+    status: "ok",
+    processed: results.length,
+    id: results[0]?.notification?.id,
+  });
 }
 
 export async function accessibility(
   req: Request,
   res: Response,
 ): Promise<void> {
-  const result = await ingestService.ingestAccessibility(
-    req.body,
-    fallbackDeviceId(req),
-  );
-  res.status(200).json({ status: "ok", id: result.message.id });
+  const payloads = Array.isArray(req.body) ? req.body : [req.body];
+  const fbDeviceId = fallbackDeviceId(req);
+
+  const results = [];
+  for (const p of payloads) {
+    results.push(await ingestService.ingestAccessibility(p, fbDeviceId));
+  }
+
+  res.status(200).json({
+    status: "ok",
+    processed: results.length,
+    id: results[0]?.message?.id,
+  });
 }
 
 export async function layoutDump(req: Request, res: Response): Promise<void> {

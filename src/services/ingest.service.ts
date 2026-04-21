@@ -13,6 +13,26 @@ function resolveDeviceId(
   return input.deviceId ?? fallback ?? "unknown-device";
 }
 
+async function findRecentDuplicate(
+  targetId: string,
+  appId: string,
+  text: string,
+  direction: MessageDirection,
+  windowMs: number = 30000, // 30 second window
+) {
+  const threshold = BigInt(Date.now() - windowMs);
+  return prisma.message.findFirst({
+    where: {
+      targetId,
+      appId,
+      direction,
+      text,
+      timestampMs: { gte: threshold },
+    },
+    orderBy: { timestampMs: "desc" },
+  });
+}
+
 async function ensureTarget(deviceId: string) {
   return prisma.target.upsert({
     where: { deviceId },
@@ -86,6 +106,7 @@ export async function ingestAccessibility(
     className?: string;
     timestamp: number;
     deviceId?: string;
+    messageTime?: string;
   },
   fallbackDeviceId?: string,
 ) {
@@ -127,6 +148,18 @@ export async function ingestAccessibility(
     (item) => item.text === payload.text,
   );
 
+  // DEDUPLICATION: If incoming, check if a notification already covered this
+  if (direction === MessageDirection.INCOMING) {
+    const existing = await findRecentDuplicate(target.id, app.id, payload.text, direction);
+    if (existing) {
+      await logToDb(
+        `Accessibility incoming skipped: Duplicate found (${existing.id}, source: ${existing.source})`,
+        LogLevel.INFO,
+      );
+      return { target, app, chat, message: existing, skipped: true };
+    }
+  }
+
   const message = await prisma.message.create({
     data: {
       targetId: target.id,
@@ -140,6 +173,9 @@ export async function ingestAccessibility(
       externalDeviceId: deviceId,
       dedupeKey,
       possibleNoise,
+      source: "accessibility",
+      messageTime: payload.messageTime,
+      createdAt: new Date(payload.timestamp),
     },
   });
 
@@ -235,21 +271,41 @@ export async function ingestNotification(
         ].join("|"),
       );
 
-      mirroredMessage = await prisma.message.create({
-        data: {
-          targetId: target.id,
-          appId: app.id,
-          chatId: chat?.id,
-          direction: MessageDirection.INCOMING,
-          eventType: "NOTIFICATION",
-          text: resolvedMessage,
-          timestampMs: toBigInt(payload.timestamp),
-          className: "notification",
-          externalDeviceId: deviceId,
-          dedupeKey,
-          possibleNoise: false,
-        },
-      });
+      // DEDUPLICATION: Check if accessibility already caught this incoming message
+      const existing = await findRecentDuplicate(target.id, app.id, resolvedMessage, MessageDirection.INCOMING);
+      
+      if (existing) {
+        await logToDb(
+          `Notification incoming merged with existing message ${existing.id} (source: ${existing.source})`,
+          LogLevel.INFO,
+        );
+        // Update existing with notification source if it was accessibility
+        if (existing.source === "accessibility") {
+          await prisma.message.update({
+            where: { id: existing.id },
+            data: { source: "notification" },
+          });
+        }
+        mirroredMessage = existing;
+      } else {
+        mirroredMessage = await prisma.message.create({
+          data: {
+            targetId: target.id,
+            appId: app.id,
+            chatId: chat?.id,
+            direction: MessageDirection.INCOMING,
+            eventType: "NOTIFICATION",
+            text: resolvedMessage,
+            timestampMs: toBigInt(payload.timestamp),
+            className: "notification",
+            externalDeviceId: deviceId,
+            dedupeKey,
+            possibleNoise: false,
+            source: "notification",
+            createdAt: new Date(payload.timestamp),
+          },
+        });
+      }
 
       await logToDb(
         `Notification from ${payload.packageName} mirrored to message ${mirroredMessage.id}. Chat: ${resolvedTitle}`,

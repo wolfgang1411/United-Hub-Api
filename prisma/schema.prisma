@@ -117,6 +117,8 @@ model Message {
   dedupeKey        String
   createdAt        DateTime         @default(now())
   possibleNoise    Boolean          @default(false)
+  source           String?          // "notification" or "accessibility" — tracks provenance
+  messageTime      String?          // UI-extracted timestamp (e.g., "10:30 AM")
   app              App              @relation(fields: [appId], references: [id], onDelete: Cascade)
   chat             Chat?            @relation(fields: [chatId], references: [id])
   target           Target           @relation(fields: [targetId], references: [id], onDelete: Cascade)
@@ -125,6 +127,7 @@ model Message {
   @@index([targetId, timestampMs(sort: Desc)])
   @@index([chatId, timestampMs(sort: Desc)])
   @@index([appId, timestampMs(sort: Desc)])
+  @@index([targetId, appId, direction, timestampMs(sort: Desc)]) // Fast dedup lookups
 }
 
 model Notification {

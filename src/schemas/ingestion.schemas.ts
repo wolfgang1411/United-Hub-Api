@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const unixMs = z.coerce.number().int().positive();
 
-export const notificationIngestSchema = z.object({
+const notificationBase = z.object({
   type: z.string().optional(),
   source: z.string().optional(),
   packageName: z.string().min(1),
@@ -14,7 +14,12 @@ export const notificationIngestSchema = z.object({
   deviceId: z.string().min(1).optional(),
 });
 
-export const accessibilityIngestSchema = z.object({
+export const notificationIngestSchema = z.union([
+  notificationBase,
+  z.array(notificationBase),
+]);
+
+const accessibilityBase = z.object({
   type: z.string().min(1),
   source: z.string().optional(),
   packageName: z.string().min(1),
@@ -26,7 +31,13 @@ export const accessibilityIngestSchema = z.object({
   className: z.string().optional(),
   timestamp: unixMs,
   deviceId: z.string().min(1).optional(),
+  messageTime: z.string().optional(),
 });
+
+export const accessibilityIngestSchema = z.union([
+  accessibilityBase,
+  z.array(accessibilityBase),
+]);
 
 const layoutNodeSchema = z.object({
   depth: z.number(),
