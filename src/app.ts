@@ -5,7 +5,7 @@ import { ingestRouter } from "./routes/ingest.routes";
 import { retrievalRouter } from "./routes/retrieval.routes";
 import { errorHandler } from "./middlewares/error";
 
-export const app = express();
+const app = express();
 
 app.use(express.json({ limit: "2mb" }));
 app.use((req, _res, next) => {
@@ -19,3 +19,5 @@ app.use("/api", retrievalRouter);
 app.use("/", ingestRouter);
 
 app.use(errorHandler);
+
+export default app;
